@@ -41,6 +41,35 @@ export function guidanceMessage(
 }
 
 /**
+ * Grabs the video's current (unmirrored) frame as a JPEG File. Resolves null
+ * if the video has no frame yet. Shared by auto-capture and manual capture.
+ */
+export function captureVideoFrame(
+  video: HTMLVideoElement,
+  fileName: string
+): Promise<{ file: File; blob: Blob } | null> {
+  return new Promise((resolve) => {
+    if (video.videoWidth === 0) return resolve(null);
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return resolve(null);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      (blob) =>
+        resolve(
+          blob
+            ? { file: new File([blob], fileName, { type: "image/jpeg" }), blob }
+            : null
+        ),
+      "image/jpeg",
+      0.92
+    );
+  });
+}
+
+/**
  * Shared guided auto-capture loop (used by enrollment and attendance).
  *
  * While `active`, runs face-landmark detection on the video every
@@ -81,31 +110,17 @@ export function useAutoFaceCapture({
 
     const capture = () => {
       const video = videoRef.current;
-      if (!video || video.videoWidth === 0) {
+      if (!video) {
         capturingRef.current = false;
         return;
       }
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        capturingRef.current = false;
-        return;
-      }
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            capturingRef.current = false;
-            return;
-          }
-          const file = new File([blob], fileName, { type: "image/jpeg" });
-          onCaptureRef.current(file, blob);
-        },
-        "image/jpeg",
-        0.92
-      );
+      captureVideoFrame(video, fileName).then((frame) => {
+        if (!frame) {
+          capturingRef.current = false;
+          return;
+        }
+        onCaptureRef.current(frame.file, frame.blob);
+      });
     };
 
     const intervalId = setInterval(() => {

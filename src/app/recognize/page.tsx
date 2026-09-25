@@ -190,7 +190,7 @@ export default function TakeAttendancePage() {
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/80 backdrop-blur-sm">
                 <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow">
                   <CheckCircle2 className="h-4 w-4" />
-                  Captured
+                  Face captured
                 </span>
                 <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
                   <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
