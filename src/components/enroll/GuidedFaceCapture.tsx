@@ -19,8 +19,12 @@ import {
   classifyCameraError,
   stopMediaStream,
 } from "@/lib/camera";
+import {
+  guidanceMessage,
+  useAutoFaceCapture,
+} from "@/hooks/useAutoFaceCapture";
 import { getFaceLandmarker } from "@/lib/faceLandmarker";
-import { evaluatePose, type PoseTarget } from "@/lib/pose";
+import type { PoseTarget } from "@/lib/pose";
 import { cn } from "@/lib/utils";
 import type { FaceLandmarker } from "@mediapipe/tasks-vision";
 
@@ -61,40 +65,9 @@ const STEPS: StepConfig[] = [
   },
 ];
 
-const DETECTION_INTERVAL_MS = 150;
-const HOLD_DURATION_MS = 900;
 const FLASH_DURATION_MS = 1100;
 
 type Captured = Partial<Record<PoseTarget, { file: File; url: string }>>;
-
-interface DetectionStatus {
-  faceCount: number;
-  centered: boolean;
-  sizeOk: boolean;
-  angleOk: boolean;
-  distanceHint: "ok" | "too-close" | "too-far";
-  holdProgress: number;
-}
-
-const IDLE_STATUS: DetectionStatus = {
-  faceCount: 0,
-  centered: false,
-  sizeOk: false,
-  angleOk: false,
-  distanceHint: "ok",
-  holdProgress: 0,
-};
-
-function guidanceMessage(step: StepConfig, status: DetectionStatus): string {
-  if (status.faceCount === 0) return "Position your face inside the frame";
-  if (status.faceCount > 1)
-    return "Please make sure only one person is in the camera.";
-  if (status.distanceHint === "too-far") return "Move a little closer";
-  if (status.distanceHint === "too-close") return "Move back slightly";
-  if (!status.centered) return "Center your face in the frame";
-  if (!status.angleOk) return step.instruction;
-  return "Hold still...";
-}
 
 export function GuidedFaceCapture({
   submitting,
@@ -112,8 +85,6 @@ export function GuidedFaceCapture({
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
-  const capturingRef = useRef(false);
-  const holdStartRef = useRef<number | null>(null);
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [cameraError, setCameraError] = useState<CameraErrorType>("other");
@@ -121,7 +92,6 @@ export function GuidedFaceCapture({
   const [captured, setCaptured] = useState<Captured>({});
   const [retakeOnly, setRetakeOnly] = useState<PoseTarget | null>(null);
   const [flashUrl, setFlashUrl] = useState<string | null>(null);
-  const [status, setStatus] = useState<DetectionStatus>(IDLE_STATUS);
 
   const step = STEPS[stepIndex];
 
@@ -178,112 +148,30 @@ export function GuidedFaceCapture({
     }
   };
 
-  // Landmark detection loop for the current step.
-  useEffect(() => {
-    if (phase !== "capturing") return;
-
-    capturingRef.current = false;
-    holdStartRef.current = null;
-
-    const target = step.key;
-
-    const capture = () => {
-      const video = videoRef.current;
-      if (!video || video.videoWidth === 0) {
-        capturingRef.current = false;
-        return;
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        capturingRef.current = false;
-        return;
-      }
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            capturingRef.current = false;
-            return;
-          }
-          const file = new File([blob], step.fileName, {
-            type: "image/jpeg",
-          });
-          const url = URL.createObjectURL(blob);
-          setCaptured((prev) => {
-            const existing = prev[target];
-            if (existing) URL.revokeObjectURL(existing.url);
-            return { ...prev, [target]: { file, url } };
-          });
-          setFlashUrl(url);
-          setPhase("flash");
-        },
-        "image/jpeg",
-        0.92
-      );
-    };
-
-    const intervalId = setInterval(() => {
-      const video = videoRef.current;
-      const landmarker = landmarkerRef.current;
-      if (
-        !video ||
-        !landmarker ||
-        video.readyState < 2 ||
-        capturingRef.current
-      ) {
-        return;
-      }
-
-      const result = landmarker.detectForVideo(video, performance.now());
-      const faces = result.faceLandmarks;
-
-      if (faces.length !== 1) {
-        holdStartRef.current = null;
-        setStatus({ ...IDLE_STATUS, faceCount: faces.length });
-        return;
-      }
-
-      const evaluation = evaluatePose(faces[0], target);
-      if (!evaluation.ready) {
-        holdStartRef.current = null;
-        setStatus({
-          faceCount: 1,
-          centered: evaluation.centered,
-          sizeOk: evaluation.sizeOk,
-          angleOk: evaluation.angleOk,
-          distanceHint: evaluation.distanceHint,
-          holdProgress: 0,
-        });
-        return;
-      }
-
-      const now = performance.now();
-      if (holdStartRef.current === null) holdStartRef.current = now;
-      const elapsed = now - holdStartRef.current;
-      const holdProgress = Math.min(
-        100,
-        Math.round((elapsed / HOLD_DURATION_MS) * 100)
-      );
-      setStatus({
-        faceCount: 1,
-        centered: true,
-        sizeOk: true,
-        angleOk: true,
-        distanceHint: "ok",
-        holdProgress,
+  // Landmark detection + auto-capture loop for the current step.
+  const handleAutoCapture = useCallback(
+    (file: File, blob: Blob) => {
+      const target = step.key;
+      const url = URL.createObjectURL(blob);
+      setCaptured((prev) => {
+        const existing = prev[target];
+        if (existing) URL.revokeObjectURL(existing.url);
+        return { ...prev, [target]: { file, url } };
       });
+      setFlashUrl(url);
+      setPhase("flash");
+    },
+    [step.key]
+  );
 
-      if (elapsed >= HOLD_DURATION_MS && !capturingRef.current) {
-        capturingRef.current = true;
-        capture();
-      }
-    }, DETECTION_INTERVAL_MS);
-
-    return () => clearInterval(intervalId);
-  }, [phase, stepIndex, step.key, step.fileName]);
+  const status = useAutoFaceCapture({
+    videoRef,
+    landmarkerRef,
+    active: phase === "capturing",
+    target: step.key,
+    fileName: step.fileName,
+    onCapture: handleAutoCapture,
+  });
 
   // Brief freeze/success frame, then auto-advance to the next step (or to
   // review once the last pose — or a single retake — is done).
@@ -537,7 +425,7 @@ export function GuidedFaceCapture({
                     )}
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
-                    {guidanceMessage(step, status)}
+                    {guidanceMessage(status, step.instruction)}
                   </p>
 
                   <div className="mx-auto mt-3 h-2 w-full max-w-xs overflow-hidden rounded-full bg-slate-100">

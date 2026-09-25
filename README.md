@@ -41,7 +41,7 @@ existing backend API.
 
 ## Project layout
 
-- `src/app` — routes (Dashboard, People, Person Details, Enroll, Recognize, Settings)
+- `src/app` — routes (Dashboard, People, Person Details, Enroll, Take Attendance at /recognize, Settings)
 - `src/components` — layout shell, UI primitives, and feature components
 - `src/lib/api` — typed API client and backend request functions
 - `src/types` — TypeScript interfaces mirroring the backend API contract

@@ -84,8 +84,8 @@ export default function DashboardPage() {
                 <QuickAction
                   href="/recognize"
                   icon={ScanFace}
-                  title="Recognize Face"
-                  description="Identify a person from an uploaded image."
+                  title="Take Attendance"
+                  description="Identify enrolled people using the camera."
                 />
               </div>
             </div>

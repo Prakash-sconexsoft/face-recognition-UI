@@ -28,7 +28,7 @@ export function BoundingBoxOverlay({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={imageUrl}
-        alt="Uploaded photo submitted for face recognition"
+        alt="Photo submitted for face recognition"
         className="block h-auto w-full select-none"
         draggable={false}
         onLoad={(event) => {
