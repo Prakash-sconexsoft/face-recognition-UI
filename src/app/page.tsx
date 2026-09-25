@@ -1,69 +1,202 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { ScanFace, UserPlus, Users, Fingerprint, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { CardSkeleton } from "@/components/ui/LoadingState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { usePersons } from "@/hooks/usePersons";
+import { formatDateTime } from "@/lib/utils";
+
+export default function DashboardPage() {
+  const { persons, loading, error, refresh } = usePersons();
+
+  const totalPersons = persons.length;
+  const totalEmbeddings = persons.reduce(
+    (sum, person) => sum + (person.embedding_count ?? 0),
+    0
+  );
+  const recentPersons = [...persons]
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+    .slice(0, 5);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div>
+      <PageHeader
+        title="Dashboard"
+        description="Overview of enrolled people and face embeddings."
+      />
+
+      {error ? (
+        <ErrorState message={error} onRetry={refresh} />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {loading ? (
+              <>
+                <CardSkeleton />
+                <CardSkeleton />
+                <CardSkeleton />
+              </>
+            ) : (
+              <>
+                <StatCard
+                  icon={Users}
+                  label="Total Persons"
+                  value={totalPersons}
+                  accent="bg-blue-50 text-blue-600"
+                />
+                <StatCard
+                  icon={Fingerprint}
+                  label="Total Embeddings"
+                  value={totalEmbeddings}
+                  accent="bg-violet-50 text-violet-600"
+                />
+                <StatCard
+                  icon={ScanFace}
+                  label="Avg. Embeddings / Person"
+                  value={
+                    totalPersons > 0
+                      ? Math.round((totalEmbeddings / totalPersons) * 10) / 10
+                      : 0
+                  }
+                  accent="bg-emerald-50 text-emerald-600"
+                />
+              </>
+            )}
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-1">
+              <h2 className="mb-3 text-sm font-semibold text-slate-900">
+                Quick Actions
+              </h2>
+              <div className="space-y-3">
+                <QuickAction
+                  href="/people/enroll"
+                  icon={UserPlus}
+                  title="Enroll Person"
+                  description="Register a new person and capture face images."
+                />
+                <QuickAction
+                  href="/recognize"
+                  icon={ScanFace}
+                  title="Recognize Face"
+                  description="Identify a person from an uploaded image."
+                />
+              </div>
+            </div>
+
+            <div className="lg:col-span-2">
+              <div className="flex items-center justify-between">
+                <h2 className="mb-3 text-sm font-semibold text-slate-900">
+                  Recently Enrolled
+                </h2>
+                <Link
+                  href="/people"
+                  className="mb-3 flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                >
+                  View all
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                {loading ? (
+                  <div className="p-6 text-sm text-slate-400">Loading...</div>
+                ) : recentPersons.length === 0 ? (
+                  <div className="p-6 text-sm text-slate-500">
+                    No people enrolled yet. Get started by enrolling your
+                    first person.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-slate-100">
+                    {recentPersons.map((person) => (
+                      <li key={person.id}>
+                        <Link
+                          href={`/people/${person.id}`}
+                          className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-slate-900">
+                              {person.name}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {person.person_code}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-4">
+                            <span className="text-xs text-slate-500">
+                              {person.embedding_count} embeddings
+                            </span>
+                            <span className="hidden text-xs text-slate-400 sm:inline">
+                              {formatDateTime(person.created_at)}
+                            </span>
+                          </div>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: typeof Users;
+  label: string;
+  value: number;
+  accent: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-slate-500">{label}</span>
+        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+      <p className="mt-3 text-2xl font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function QuickAction({
+  href,
+  icon: Icon,
+  title,
+  description,
+}: {
+  href: string;
+  icon: typeof UserPlus;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/50"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-slate-900">{title}</p>
+        <p className="mt-0.5 text-sm text-slate-500">{description}</p>
+      </div>
+    </Link>
   );
 }
