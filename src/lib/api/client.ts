@@ -42,11 +42,11 @@ function messageFromDetail(detail: unknown, fallback: string): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  if (!API_BASE_URL) {
-    throw new ApiError(
-      "NEXT_PUBLIC_API_BASE_URL is not configured. Set it in your environment to reach the backend."
-    );
-  }
+  // if (!API_BASE_URL) {
+  //   // throw new ApiError(
+  //   //   "NEXT_PUBLIC_API_BASE_URL is not configured. Set it in your environment to reach the backend."
+  //   // );
+  // }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
